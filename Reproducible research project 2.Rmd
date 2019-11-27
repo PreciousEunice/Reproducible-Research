@@ -1,0 +1,306 @@
+---
+title: "Reproducible Research Project 2"
+author: "Precious Eunice Grullo"
+date: "11/19/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Population Health Impact and Economic Costs of Weather Events in the United States
+
+## Synopsis 
+This study explores the National Oceanic and Atmospheric Administration's (NOAA) storm database which tracks the characteristics of major weather events in the United States, including the estimates of fatalities, injuries, property damage and crop damage.
+
+Using the dataset, this study aims to analyze the impact of the weather events to the health and economy of the population in United States.  Specifically, this study enumerates the following:
+1.  Types of weather events that caused the highest combined number of fatalities and injuries as determinants for health effects 
+2.  Types of weather events that caused the highest combined damage costs to properties and crops as determinants for economic costs.
+
+## Data Processing 
+
+### Loading the needed packages.
+```{r}
+library(knitr)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+```
+
+### Loading the data.  
+
+The data used in this study came from a database containing data from January 1950 to 2011.  These data were entered by NOAA's National Weather Service (NWS). The dataset was downloaded from https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2.  The description of the dataset was available in this URL, https://www.ncdc.noaa.gov/stormevents/details.jsp.
+
+
+```{r}
+if (!file.exists("stormData.csv.bz2")) {
+     file<-"https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+     download.file(file, destfile="stormData.csv.bz2", method="curl")
+}
+
+#Loading the raw data file.
+storm_raw <- read.csv("stormData.csv.bz2")
+
+```
+
+### Data transformations:  Description and Justification 
+The structure of the dataset was analyzed.
+```{r}
+#Look at the structure of the dataset.
+str(storm_raw)
+
+```
+The dataset contains 902,297 observations with 37 variables.  A subset of this dataset containing variables pertinent to the study questions was created.  The following variables were included in the subset:
+1.  "BGN_DATE" - date when the weather event occurred
+2.  "EVTYPE" -  type of weather event
+3.  "FATALITIES" - number of deaths that occurred directly or indirectly due to the event
+4.  "INJURIES" - number of injuries that occurred directly or indirectly due to the event
+5.  "PROPDMG" - cost of damage to property 
+6.  "PROPDMGEXP" - exponential factor for damage to property
+7.  "CROPDMG" - cost of damage to crops
+8.  "CROPDMGEXP" - exponential factor for damage to crops
+
+```{r}
+#Enumeration of variable names
+names(storm_raw)
+
+#Creation of subset containing pertinent variables
+storm <- storm_raw %>% select("BGN_DATE", "EVTYPE", "FATALITIES",  "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP") 
+
+#Looking at the structure of the subset
+str(storm)
+```
+####Data Transformation for the variable "BGN_DATE".
+The data contains records from 1950 to 2011.  However, all 48 event types were recorded only from 1996 to 2011.  From 1950 to 1954, only tornadoes were recorded; from 1955 to 1995, only tornado, thunderstorm wind and hail events were recorded.  If the tornadoes have the most number of years recorded, there is a possibility that it would have higher health and economic damage recorded.  In order to remove this measurement bias, a subset of data wherein all 48 event types were recorded (from 1996-2011) was created.
+
+```{r}
+#Creation of variable year
+storm_date <- storm %>% mutate(date=mdy_hms(storm$BGN_DATE)) %>% mutate(year=year(date))
+
+#Creation of subset recorded from years 1996 to 2011.
+storm_df <- storm_date %>% filter(year>=1996)
+str(storm_df)
+```
+
+####Data Transformation for the variable "EVTYPE".
+
+The unique values under the variable "EVTYPE" was examined.
+
+```{r}
+unique(storm$EVTYPE)
+```
+
+According to NOAA, there are 48 types of events listed.  Since there are 985 levels under the variable "EVTYPE", we need to clean the data.  Synonymous event types were combined to form one event type until 48 event types were enumerated.  
+
+```{r}
+# Data cleaning
+storm_df$EVTYPE <- toupper(storm_df$EVTYPE)
+storm_df$EVTYPE[grep("SMOKE",storm_df$EVTYPE)] <- "SMOKE"
+storm_df$EVTYPE[grep("WET",storm_df$EVTYPE)] <- "WET"
+storm_df$EVTYPE[grep("AVALAN",storm_df$EVTYPE)] <- "AVALANCHE"
+storm_df$EVTYPE[grep("RAIN",storm_df$EVTYPE)] <- "HEAVY RAIN"
+storm_df$EVTYPE[grep("COLD|COOL|HYPOTHERMIA|FREEZE|FROST",storm_df$EVTYPE)] <- "HYPOTHERMIA"
+storm_df$EVTYPE[grep("DRY|DRIEST",storm_df$EVTYPE)] <- "DRY"
+storm_df$EVTYPE[grep("FLOOD|FLDG|FLD|URBAN|FLOOO|FLOYD|DAM",storm_df$EVTYPE)] <- "FLOOD"
+storm_df$EVTYPE[grep("HAIL",storm_df$EVTYPE)] <- "HAIL"
+storm_df$EVTYPE[grep("FREEZING",storm_df$EVTYPE)] <- "FREEZING RAIN"
+storm_df$EVTYPE[grep("BLIZZARD|WINTER",storm_df$EVTYPE)] <- "BLIZZARD"
+storm_df$EVTYPE[grep("HYPERTHERMIA|WARM",storm_df$EVTYPE)] <- "HYPERTHERMIA"
+storm_df$EVTYPE[grep("ICE|ICY",storm_df$EVTYPE)] <- "ICE"
+storm_df$EVTYPE[grep("HIGH WIND",storm_df$EVTYPE)] <- "HIGH WIND"
+storm_df$EVTYPE[grep("HURRICANE|TYPHOON",storm_df$EVTYPE)] <- "HURRICANE"
+storm_df$EVTYPE[grep("SURF",storm_df$EVTYPE)] <- "SURF"
+storm_df$EVTYPE[grep("PRECIP",storm_df$EVTYPE)] <- "PRECIPITATION"
+storm_df$EVTYPE[grep("SNOW",storm_df$EVTYPE)] <- "SNOW"
+storm_df$EVTYPE[grep("TROP",storm_df$EVTYPE)] <- "TROPICAL STORM"
+storm_df$EVTYPE[grep("THUNDER|TSTM",storm_df$EVTYPE)] <- "THUNDER STORM"
+storm_df$EVTYPE[grep("LIGHTN|LIGHTI|LIGNT",storm_df$EVTYPE)] <- "LIGHTNING"
+storm_df$EVTYPE[grep("WIND|WND",storm_df$EVTYPE)] <- "WIND"
+storm_df$EVTYPE[grep("TORN|FUNNEL",storm_df$EVTYPE)] <- "TORNADO"
+storm_df$EVTYPE[grep("FIRE",storm_df$EVTYPE)] <- "WILDFIRE"
+storm_df$EVTYPE[grep("TEMPERATURE",storm_df$EVTYPE)] <- "RECORD TEMPERATURE"
+storm_df$EVTYPE[grep("DUST",storm_df$EVTYPE)] <- "DUSTSTORM"
+storm_df$EVTYPE[grep("SURGE",storm_df$EVTYPE)] <- "STORM SURGE"
+storm_df$EVTYPE[grep("SPOUT",storm_df$EVTYPE)]  <- "WATERSPOUT"
+storm_df$EVTYPE[grep("HEAT|HOT|HIGH TEMP",storm_df$EVTYPE)] <- "HEATWAVE"
+storm_df$EVTYPE[grep("SWELL|SEA|TIDE",storm_df$EVTYPE)] <- "HIGH SEAS"
+storm_df$EVTYPE[grep("COASTAL",storm_df$EVTYPE)] <- "COASTAL ACCIDENT"
+storm_df$EVTYPE[grep("RIP",storm_df$EVTYPE)] <- "RIPTIDE"
+storm_df$EVTYPE[grep("FOG|VOG",storm_df$EVTYPE)]  <- "FOG"
+storm_df$EVTYPE[grep("SLIDE|SLUMP",storm_df$EVTYPE)]  <- "LANDSLIDE"
+storm_df$EVTYPE[grep("VOLCAN",storm_df$EVTYPE)] <- "VOLCANO"
+storm_df$EVTYPE[grep("SUMMARY|MONTHLY",storm_df$EVTYPE)] <- "SUMMARY"
+storm_df$EVTYPE[grep("NO",storm_df$EVTYPE)] <- "NONE"
+
+unique(storm_df$EVTYPE)
+```
+Two of the levels are not event types - "NONE" which is defined as no weather event and "SUMMARY" which is defined as monthly summaries.  A subset excluding these two are created.
+```{r}
+#Creation of subset containing 48 weather events
+storm_df0 <- filter(storm_df, !EVTYPE%in%c("NONE","SUMMARY"))
+unique(storm_df0$EVTYPE)
+```
+Now, there are 48 levels of the variable "EVTYPE", as indicated in NOAA.
+
+####Data Transformation for the variables "FATALITIES" and "INJURIES".
+
+The structure and summary of the variables "FATALITIES" and "INJURIES" were examined.
+```{r}
+#Looking at the structure and summary of the variables "FATALITIES" and "INJURIES"
+str(storm_df0$FATALITIES)
+summary(storm_df0$FATALITIES)
+str(storm_df0$INJURIES)
+summary(storm_df0$INJURIES)
+```
+
+To answer the first question, the two health-related variables must be combined, creating a new variable, "HEALTH".  This would represent the total harm to the population health caused by the specific weather event.
+
+```{r}
+#Creation of the variable "HEALTH"
+storm_df1 <- storm_df0 %>% mutate("HEALTH"= storm_df0$FATALITIES+ storm_df0$INJURIES)
+str(storm_df1$HEALTH)
+summary(storm_df1$HEALTH)
+```
+
+
+####Data Transformation for the variables "PROPDMG" and "PROPDMGEXP".
+
+The structure of the variables "PROPDMG" and "PROPDMGEXP" were examined.
+```{r}
+#Looking at the structure of the variables "PROPDMG" and "PROPDMGEXP"
+str(storm_df1$PROPDMG)
+summary(storm_df1$PROPDMG)
+str(storm_df1$PROPDMGEXP)
+```
+
+The unique values under the variable "PROPDMGEXP" was examined.
+
+```{r}
+unique(storm_df1$PROPDMGEXP)
+```
+
+The values under the variable "PROPDMGEXP" was converted into numeric equivalent.
+```{r}
+#Data cleaning
+storm_df1$PROPDMGEXP <- toupper(storm_df1$PROPDMGEXP)
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "")] <- 10^0
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "0")] <- 10^0
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "+")] <- 10^0
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "?")] <- 10^0
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "-")] <- 10^0
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "1")] <- 10^1
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "2")] <- 10^2
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "H")] <- 10^2
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "K")] <- 10^3
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "3")] <- 10^3
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "4")] <- 10^4
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "5")] <- 10^5
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "6")] <- 10^6
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "M")] <- 10^6
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "7")] <- 10^7
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "8")] <- 10^8
+storm_df1$PROP_EXP[(storm_df1$PROPDMGEXP == "B")] <- 10^9
+
+str(storm_df1$PROP_EXP)
+unique(storm_df1$PROP_EXP)
+```
+
+The variables "PROPDMG" and "PROP_EXP" were multiplied, creating a variable, "PROPCOST".  This would represent the total cost of the property damaged by the weather event.
+
+```{r}
+#Creation of the variable "PROPCOST"
+storm_df1 <- storm_df1 %>% mutate("PROPCOST"= storm_df1$PROPDMG*storm_df1$PROP_EXP)
+```
+
+####Data Transformation for the variable "CROPDMG" "CROPDMGEXP".
+The structure of the variables "CROPDMG" and "CROPDMGEXP" were examined.
+```{r}
+#Looking at the structure of the variables "CROPDMG" and "CROPDMGEXP"
+str(storm_df1$CROPDMG)
+summary(storm_df1$CROPDMG)
+str(storm_df1$CROPDMGEXP)
+```
+
+The unique values under the variable "PROPDMGEXP" was examined.
+
+```{r}
+unique(storm_df1$CROPDMGEXP)
+```
+
+The values under the variable "PROPDMGEXP" was converted into numeric equivalent.
+
+```{r}
+#Data cleaning
+storm_df1$CROPDMGEXP <- toupper(storm_df1$CROPDMGEXP)
+storm_df1$CROP_EXP[(storm_df1$CROPDMGEXP == "")] <- 10^0
+storm_df1$CROP_EXP[(storm_df1$CROPDMGEXP == "0")] <- 10^0
+storm_df1$CROP_EXP[(storm_df1$CROPDMGEXP == "?")] <- 10^0
+storm_df1$CROP_EXP[(storm_df1$CROPDMGEXP == "2")] <- 10^2
+storm_df1$CROP_EXP[(storm_df1$CROPDMGEXP == "K")] <- 10^3
+storm_df1$CROP_EXP[(storm_df1$CROPDMGEXP == "M")] <- 10^6
+storm_df1$CROP_EXP[(storm_df1$CROPDMGEXP == "B")] <- 10^9
+
+str(storm_df1$CROP_EXP)
+unique(storm_df1$CROP_EXP)
+```
+
+The variables "CROPDMG" and "CROP_EXP" were multiplied, creating a variable, "CROPCOST".  This would represent the total cost of the crops damaged by the weather event.
+
+```{r}
+#Creation of the variable "CROPCOST"
+storm_df1 <- storm_df1 %>% mutate("CROPCOST"= storm_df1$CROPDMG*storm_df1$CROP_EXP)
+```
+
+To answer the second question, the two economic-related variables were combined, creating a new variable, "ECONOMY".  This would represent the total economic cost caused by the specific weather event.
+
+```{r}
+#Creation of the variable "ECONOMY"
+storm_df1 <- storm_df1 %>% mutate("ECONOMY"=storm_df1$PROPCOST+storm_df1$CROPCOST)
+```
+
+## Results 
+### Damage to Health
+To show which weather event caused the most harm to the population health, the total health damage represented by the variable "HEALTH" was determined per weather event.  Figure 1 summarizes the ten weather events with the highest total number of fatalities and injuries.
+```{r}
+#Creation of Figure 1 showing the Top 10 Most Harmful Weather Events to Health
+health_cost <- storm_df1 %>% group_by(EVTYPE) %>% summarise(total_health=sum(HEALTH)) %>% arrange(desc(total_health))
+
+health_cost[1,]
+
+fig1 <- ggplot(health_cost[1:10,], aes(x=reorder(EVTYPE,-total_health), y=health_cost$total_health[1:10])) + geom_col() + ggtitle("Top 10 Most Harmful Weather Events to Health, 1996-2011") + xlab("Weather Event") + ylab("Total number of fatalities and injuries") + theme(axis.text.x=element_text(angle=90))
+
+fig1
+
+```
+
+
+Figure 1 shows that the weather event that is most harmful to population health is tornado.  It caused the 22,179 combined fatalities and injuries accross the United States, from 1996-2011. Tornado is followed by flood and heatwave as the second and third most harmful to population health, respectively.
+
+### Damage to economy
+To show which weather event caused the most damage to the economy, the total economic damage represented by the variable "ECONOMY" was determined per weather event.  Figure 2 summarizes the ten weather events with the highest total number of fatalities and injuries.
+
+```{r}
+#Creation of Figure 2 showing the Top 10 Most Damaging Weather Events to Economy
+economy_cost <- storm_df1 %>% group_by(EVTYPE) %>% summarise(total_economy=sum(ECONOMY)) %>% arrange(desc(total_economy))
+
+economy_cost[1,]
+
+fig2 <- ggplot(economy_cost[1:10,], aes(x=reorder(EVTYPE,-total_economy), y=economy_cost$total_economy[1:10])) + geom_col() + ggtitle("Top 10 Most Damaging Weather Events to Economy, 1996-2011") + xlab("Weather Event") + ylab("Total damage cost to properties and crops") + theme(axis.text.x=element_text(angle=90))
+
+fig2
+
+```
+
+Figure 2 shows that the weather event that caused the highest cost of economic damage is flood.  The combined economic damage costs to properties and crops caused by flood accross the United States, from 1996-2011, is 166,114,907,870 USD. Flood is followed by hurricane and storm surge as the second and third most economically damaging weather event, respectively.
+
+## Analysis 
+
+### Question 1.  Which types of events are most harmful to population health?
+Tornado is the most harmful to population health.  It is followed by flood and heatwave.
+
+### Question 2.  Which types of events have the greatest economic consequences?
+Flood caused the highest cost of economic damage across the United States from 1996-2011.  It is followed by hurricane and storm surge.
+
+## Conclusion
+Tornadoes caused the greatest harm to health and flood caused the greatest economic consequences.  Given that there are many other weather events occuring, policies focusing on the hazard reduction of tornadoes and flood should be prioritized.
